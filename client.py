@@ -29,6 +29,10 @@ class ChatClient:
         self.disconnect_button = Button(root, text='Отключиться', command=self.disconnect_from_server, state='disabled')
         self.disconnect_button.pack()
 
+        Label(root, text='Сообщения: ').pack()
+        self.message_area = scrolledtext.ScrolledText(root, width=50, height=15, state='disabled')
+        self.message_area.pack()
+
         Label(root, text='Ваше сообщение:').pack()
         self.input_entry = Entry(root, width=50)
         self.input_entry.pack()
@@ -41,15 +45,81 @@ class ChatClient:
         self.connected = False
 
     def connect_to_server(self):
-       pass
+        server_ip = self.ip_entry.get()
+        port = int(self.port_entry.get())
+        self.username = self.name_entry.get()
+
+
+        try:
+            self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.client_socket.connect((server_ip, port))
+            self.connected = True
+
+            self.connect_button.config(state='disabled')
+            self.disconnect_button.config(state='normal')
+            self.send_button.config(state='normal')
+            self.ip_entry.config(state='disabled')
+            self.port_entry.config(state='disabled')
+            self.name_entry.config(state='disabled')
+
+            self.add_message(f'Подключено к серверу {server_ip}:{port}')
+
+            receive_thread = threading.Thread(target=self.receive_messages, daemon=True)
+            receive_thread.start()
+
+        except Exception as e:
+            messagebox.showerror('Ошибка', f'Не удалось подключиться: {str(e)}')
+
+    def receive_messages(self):
+        while self.connected:
+            try:
+                data = self.client_socket.recv(1024).decode('utf-8')
+                if not data:
+                    break
+                self.add_message(data)
+            except:
+                if self.connected:
+                    self.add_message('Ошибка при получении сообщения')
+                    self.disconnect_from_server()
+                break
+
+    def add_message(self, message):
+        self.message_area.config(state='normal')
+        self.message_area.insert('end', message + '\n')
+        self.message_area.config(state='disabled')
+        self.message_area.see('end')
 
     def disconnect_from_server(self):
-        pass
-    def send_message(self, event):
-        pass
+
+        if self.client_socket:
+            self.connected = False
+            self.client_socket.close()
+
+            self.connect_button.config(state='normal')
+            self.disconnect_button.config(state='disabled')
+            self.send_button.config(state='disabled')
+            self.ip_entry.config(state='normal')
+            self.port_entry.config(state='normal')
+            self.name_entry.config(state='normal')
+
+            self.add_message('тключено от сервера')
+
+    def send_message(self, event=None):
+        if not self.connected:
+            return
+        message = self.input_entry.get()
+        if message:
+            full_name = f'{self.username}: {message}'
+            try:
+                self.client_socket.send(full_name.encode('utf-8'))
+                self.input_entry.delete(0, 'end')
+            except Exception as e:
+                self.add_message(f'Ошибка при отправке: {e}')
+                self.disconnect_from_server()
+
 
 
 
 root = Tk()
-server = ChatServer(root)
+server = ChatClient(root)
 root.mainloop()
